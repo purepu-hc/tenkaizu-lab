@@ -106,7 +106,7 @@ input[type=range]{flex:1;min-width:0;accent-color:var(--accent);height:28px}
       <canvas id="cv" aria-label="展開図の3D表示"></canvas>
       <div class="tag"><button class="icon-btn" id="prev" type="button" aria-label="前の展開図">‹</button><span class="t" id="netLabel">—</span><button class="icon-btn" id="next" type="button" aria-label="次の展開図">›</button></div>
       <div class="facts" id="facts"></div>
-      <div class="hint">ドラッグで回転・ピンチで拡大</div>
+      <div class="hint">タップでしるし・ドラッグで回転</div>
       <button class="open-nets" id="openNets" type="button">展開図をえらぶ</button>
     </div>
     <section class="bar" aria-label="操作">
@@ -123,6 +123,7 @@ input[type=range]{flex:1;min-width:0;accent-color:var(--accent);height:28px}
         <div class="grp" id="colorGrp"><b>色</b><button class="chip" id="cKind" type="button">面の形</button><button class="chip" id="cPair" type="button">向かい合う面</button></div>
         <div class="grp" id="numGrp"><b>文字</b><button class="chip" id="numBtn" type="button" aria-pressed="false">番号</button></div>
         <div class="grp"><b>視点</b><button class="chip" id="vTilt" type="button">ななめ</button><button class="chip" id="vTop" type="button">真上</button><button class="chip" id="vSide" type="button">横</button></div>
+        <div class="grp"><b>しるし</b><button class="chip" id="partnerBtn" type="button" aria-pressed="true">重なる相手も光らせる</button><button class="chip" id="clearMarks" type="button">しるしを消す</button></div>
       </div>
       <p class="note" id="note"></p>
     </section>
@@ -413,7 +414,7 @@ base.rotation.x=-Math.PI/2; spin.add(base); base.add(inner); scene.add(spin);
 const VIEWS={tilt:[.62,-.55],top:[1.5,0],side:[.08,-.6]};
 let yaw=VIEWS.tilt[1], pitch=VIEWS.tilt[0], zoom=1, viewAnim=null;
 
-const state={solid:null,net:0,t:0,target:null,seq:false,speed:4,color:'pair',num:false};
+const state={solid:null,net:0,t:0,target:null,seq:false,speed:4,color:'pair',num:false,marks:[],partner:true};
 let faces=[], fitFlat=3, fitFold=2;
 
 function numTexture(n,flip){
@@ -456,6 +457,7 @@ function buildScene(){
     faces.forEach(f=>{n.polys[f.fi].forEach(q=>{v.set(q[0],q[1],0).applyMatrix4(f.M);pts.push(v.clone());c.add(v);m++;});});
     c.divideScalar(m);return Math.max(...pts.map(p=>p.distanceTo(c)));};
   fitFlat=R(0); fitFold=R(1);
+  renderMarks();
 }
 function applyLook(){
   const sd=state.solid;
@@ -484,6 +486,82 @@ function pose(t,noCenter){
 }
 function resize(){const w=stage.clientWidth,h=stage.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
 new ResizeObserver(resize).observe(stage);
+
+
+// ---------- marks (しるし) ----------
+const MARK_COL=['#ff2d6f','#00b8ff','#ffb000','#8b5cff','#00d084','#ff6a00','#e040fb','#2ee6d6'];
+let markObjs=[];
+const raycaster=new THREE.Raycaster();
+function labelSprite(txt,col,u){
+  const cv=document.createElement('canvas');cv.width=cv.height=128;const g=cv.getContext('2d');
+  g.fillStyle=col;g.beginPath();g.arc(64,64,54,0,7);g.fill();g.lineWidth=8;g.strokeStyle='#fff';g.stroke();
+  g.fillStyle='#fff';g.font='900 64px "Zen Maru Gothic",sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(txt,64,70);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),depthTest:false,transparent:true,sizeAttenuation:false}));
+  sp.renderOrder=30; sp.scale.set(.062,.062,1); sp.center.set(-.2,-.2); return sp;
+}
+function glowPair(geo,col){
+  const solid=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:col}));
+  const ghost=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.35,depthTest:false,depthWrite:false}));
+  ghost.renderOrder=20; return [solid,ghost];
+}
+function markUnit(){return clamp(fitFlat/2.1,.6,1.8);}
+function renderMarks(){
+  markObjs.forEach(o=>{if(o.parent)o.parent.remove(o);o.traverse(x=>{if(x.geometry)x.geometry.dispose();if(x.material){if(x.material.map)x.material.map.dispose();x.material.dispose();}});});
+  markObjs=[];
+  if(!state.solid||!faces.length) return;
+  const sd=state.solid,S=sd.S,n=sd.nets[state.net],u=markUnit(),byFi={};faces.forEach(f=>byFi[f.fi]=f);
+  const near=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1])<1e-4, rk=p=>Math.round(p[0]*1e4)+','+Math.round(p[1]*1e4);
+  for(const m of state.marks){
+    const seen=new Set(); let labeled=false;
+    S.faces.forEach((F,fi)=>{
+      const g=byFi[fi].g, L=F.v.length;
+      if(m.type==='v'){
+        const k=F.v.indexOf(m.vid); if(k<0) return; const p=n.polys[fi][k];
+        if(!state.partner&&!near(p,m.pos)) return; if(seen.has(rk(p))) return; seen.add(rk(p));
+        const grp=new THREE.Group(); grp.position.set(p[0],p[1],0);
+        glowPair(new THREE.SphereGeometry(.062*u,20,14),m.col).forEach(o=>grp.add(o));
+        const sp=labelSprite(m.label,m.col,u); grp.add(sp);
+        g.add(grp); markObjs.push(grp);
+      } else {
+        for(let k=0;k<L;k++){const a=F.v[k],b=F.v[(k+1)%L]; if(edgeKey(a,b)!==m.key) continue;
+          const p=n.polys[fi][k],q=n.polys[fi][(k+1)%L],mid=[(p[0]+q[0])/2,(p[1]+q[1])/2];
+          if(!state.partner&&!near(mid,m.pos)) continue; if(seen.has(rk(mid))) continue; seen.add(rk(mid));
+          const len=Math.hypot(q[0]-p[0],q[1]-p[1]), grp=new THREE.Group();
+          grp.position.set(mid[0],mid[1],0); grp.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(q[0]-p[0],q[1]-p[1],0).normalize());
+          glowPair(new THREE.CylinderGeometry(.032*u,.032*u,len,10),m.col).forEach(o=>grp.add(o));
+          const sp=labelSprite(m.label,m.col,u); grp.add(sp);
+          g.add(grp); markObjs.push(grp);}
+      }
+    });
+  }
+}
+function handleTap(x,y,w,h){
+  if(!faces.length) return;
+  scene.updateMatrixWorld(true);
+  raycaster.setFromCamera(new THREE.Vector2(x/w*2-1,-(y/h)*2+1),camera);
+  const hit=raycaster.intersectObjects(faces.flatMap(f=>[f.front,f.back]),false)[0];
+  if(!hit) return;
+  const f=faces.find(f=>f.front===hit.object||f.back===hit.object);
+  const lp=f.g.worldToLocal(hit.point.clone()), pt=[lp.x,lp.y];
+  const sd=state.solid,S=sd.S,n=sd.nets[state.net],poly=n.polys[f.fi],V=S.faces[f.fi].v,L=poly.length;
+  let minE=1e9; for(let k=0;k<L;k++){const p=poly[k],q=poly[(k+1)%L];minE=Math.min(minE,Math.hypot(q[0]-p[0],q[1]-p[1]));}
+  const vth=Math.min(.22*markUnit(),.35*minE);
+  let bk=-1,bd=1e9; poly.forEach((p,k)=>{const d=Math.hypot(p[0]-pt[0],p[1]-pt[1]);if(d<bd){bd=d;bk=k;}});
+  let mark;
+  if(bd<vth){mark={type:'v',vid:V[bk],pos:poly[bk]};}
+  else{let ek=-1,ed=1e9;
+    for(let k=0;k<L;k++){const p=poly[k],q=poly[(k+1)%L],dx=q[0]-p[0],dy=q[1]-p[1],t=clamp(((pt[0]-p[0])*dx+(pt[1]-p[1])*dy)/(dx*dx+dy*dy),0,1);
+      const d=Math.hypot(p[0]+t*dx-pt[0],p[1]+t*dy-pt[1]);if(d<ed){ed=d;ek=k;}}
+    const p=poly[ek],q=poly[(ek+1)%L]; mark={type:'e',key:edgeKey(V[ek],V[(ek+1)%L]),pos:[(p[0]+q[0])/2,(p[1]+q[1])/2]};}
+  const same=state.marks.findIndex(m=>m.type===mark.type&&(m.type==='v'?m.vid===mark.vid:m.key===mark.key));
+  if(same>=0){state.marks.splice(same,1);renderMarks();return;}
+  const used=new Set(state.marks.map(m=>m.label)), cols=new Set(state.marks.map(m=>m.col));
+  if(mark.type==='v'){for(const c of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'){if(!used.has(c)){mark.label=c;break;}}}
+  else{for(const c of '①②③④⑤⑥⑦⑧⑨⑩⑪⑫'){if(!used.has(c)){mark.label=c;break;}}}
+  if(!mark.label) return;
+  mark.col=MARK_COL.find(c=>!cols.has(c))||MARK_COL[state.marks.length%MARK_COL.length];
+  state.marks.push(mark); renderMarks();
+}
 
 // ---------- UI ----------
 const $=id=>document.getElementById(id);
@@ -516,7 +594,7 @@ function selectSolid(sd){
   syncChips(); renderShelf(); selectNet(0);
 }
 function selectNet(i){
-  const sd=state.solid; state.net=(i+sd.nets.length)%sd.nets.length; state.target=null;
+  const sd=state.solid; state.net=(i+sd.nets.length)%sd.nets.length; state.target=null; state.marks=[];
   buildScene(); setT(0);
   $('netLabel').textContent=`No.${state.net+1} / ${sd.nets.length}`;
   $('note').textContent=sd.tip;
@@ -542,6 +620,8 @@ document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{state.speed=
 $('cKind').onclick=()=>{state.color='kind';syncChips();applyLook();renderGrid();renderShelf();};
 $('cPair').onclick=()=>{state.color='pair';syncChips();applyLook();renderGrid();renderShelf();};
 $('numBtn').onclick=()=>{state.num=!state.num;syncChips();applyLook();};
+$('partnerBtn').onclick=()=>{state.partner=!state.partner;press($('partnerBtn'),state.partner);renderMarks();};
+$('clearMarks').onclick=()=>{state.marks=[];renderMarks();};
 const setView=v=>{viewAnim={from:[pitch,yaw],to:VIEWS[v],k:0};zoom=1;};
 $('vTilt').onclick=()=>setView('tilt'); $('vTop').onclick=()=>setView('top'); $('vSide').onclick=()=>setView('side');
 document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;
@@ -549,13 +629,15 @@ document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;
 
 // pointer: rotate / pinch zoom
 const ptrs=new Map(); let drag=null,pinch=null;
+let tap=null;
 canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,[e.clientX,e.clientY]);viewAnim=null;
+  tap=ptrs.size===1?{x:e.clientX,y:e.clientY,t:performance.now()}:null;
   if(ptrs.size===1) drag={x:e.clientX,y:e.clientY,yaw,pitch};
   if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinch={d:Math.hypot(a[0]-b[0],a[1]-b[1]),z:zoom};drag=null;}});
-canvas.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,[e.clientX,e.clientY]);
+canvas.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;if(tap&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)>=8)tap=null;ptrs.set(e.pointerId,[e.clientX,e.clientY]);
   if(pinch&&ptrs.size===2){const [a,b]=[...ptrs.values()];zoom=clamp(pinch.z*Math.hypot(a[0]-b[0],a[1]-b[1])/pinch.d,.5,3);}
   else if(drag){yaw=drag.yaw+(e.clientX-drag.x)*.01;pitch=clamp(drag.pitch+(e.clientY-drag.y)*.01,-1.55,1.55);}});
-const up=e=>{ptrs.delete(e.pointerId);if(ptrs.size<2)pinch=null;if(ptrs.size===0)drag=null;
+const up=e=>{if(tap&&e.type==='pointerup'&&ptrs.size===1&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)<8&&performance.now()-tap.t<500){const r=canvas.getBoundingClientRect();handleTap(e.clientX-r.left,e.clientY-r.top,r.width,r.height);}tap=null;ptrs.delete(e.pointerId);if(ptrs.size<2)pinch=null;if(ptrs.size===0)drag=null;
   else if(ptrs.size===1){const [p]=[...ptrs.values()];drag={x:p[0],y:p[1],yaw,pitch};}};
 canvas.addEventListener('pointerup',up);canvas.addEventListener('pointercancel',up);
 canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=clamp(zoom*Math.exp(-e.deltaY*.0015),.5,3);},{passive:false});
