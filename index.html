@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="立方体・直方体・三角柱・円柱などの展開図をすべて一覧し、3Dで折りたたんで確かめられる中学受験向けシミュレーター">
+<title>展開図ラボ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<style>
+/* Layout: workbench — solid shelf on top, 3D stage on graph paper, control bar below; nets panel = side column (wide) / bottom sheet (phone) */
+:root{
+  --bg:#e9eef4; --panel:#ffffff; --paper:#fbfcfe; --grid:#dde5ef; --ink:#1b2532; --muted:#5b6878; --line:#cdd7e3;
+  --accent:#2c6cc4; --accent-ink:#ffffff; --soft:#e3ecf8;
+  --f-body:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f141b; --panel:#161d27; --paper:#131a23; --grid:#202b39; --ink:#e5ebf2; --muted:#98a6b7; --line:#2a3546;
+  --accent:#78a9ff; --accent-ink:#0f141b; --soft:#1d2a3d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f141b; --panel:#161d27; --paper:#131a23; --grid:#202b39; --ink:#e5ebf2; --muted:#98a6b7; --line:#2a3546;
+  --accent:#78a9ff; --accent-ink:#0f141b; --soft:#1d2a3d; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55}
+button{font:inherit;color:inherit}
+.app{max-width:1240px;margin:0 auto;padding-block:14px 28px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+@media (min-width:960px){.app{grid-template-columns:minmax(0,1fr) 360px;align-items:start}}
+.main{display:flex;flex-direction:column;gap:12px;min-width:0}
+header{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+h1{margin:0;font-size:26px;font-weight:900;letter-spacing:.02em}
+header p{margin:0;color:var(--muted);font-size:13px}
+
+/* solid shelf */
+.shelf{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;scrollbar-width:thin}
+.solid{flex:0 0 auto;width:88px;border:2px solid var(--line);background:var(--panel);border-radius:14px;padding:6px 4px 6px;
+  display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer}
+.solid svg{width:56px;height:52px}
+.solid span{font-size:13px;font-weight:700;white-space:nowrap}
+.solid[aria-pressed="true"]{border-color:var(--accent);background:var(--soft)}
+
+/* stage */
+.stage{position:relative;width:100%;aspect-ratio:1/1;max-height:60vh;border-radius:18px;overflow:hidden;border:1px solid var(--line);
+  background-color:var(--paper);background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:22px 22px}
+@media (min-width:960px){.stage{aspect-ratio:auto;height:min(64vh,620px);max-height:none}}
+canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+canvas:active{cursor:grabbing}
+.tag{position:absolute;left:10px;top:10px;display:flex;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--line);
+  border-radius:99px;padding:3px 4px;font-weight:700}
+.tag .t{padding:0 6px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.icon-btn{appearance:none;border:0;background:var(--soft);width:30px;height:30px;border-radius:99px;cursor:pointer;font-size:16px;line-height:1}
+.facts{position:absolute;right:10px;top:10px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px 10px;font-size:12px;color:var(--muted)}
+.hint{position:absolute;left:10px;bottom:10px;font-size:12px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:99px;padding:2px 9px;pointer-events:none}
+.open-nets{position:absolute;right:10px;bottom:10px;appearance:none;border:0;background:var(--accent);color:var(--accent-ink);font-weight:900;border-radius:99px;padding:7px 14px;cursor:pointer}
+@media (min-width:960px){.open-nets{display:none}}
+
+/* control bar */
+.bar{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.play{appearance:none;border:0;background:var(--accent);color:var(--accent-ink);font-weight:900;font-size:16px;border-radius:12px;padding:9px 14px;min-width:96px;cursor:pointer}
+.slider{flex:1;min-width:160px;display:flex;align-items:center;gap:8px}
+input[type=range]{flex:1;min-width:0;accent-color:var(--accent);height:28px}
+.pct{font-variant-numeric:tabular-nums;width:3.2em;text-align:right;font-weight:900}
+.stops{display:flex;gap:6px}
+.chip{appearance:none;border:1px solid var(--line);background:var(--paper);border-radius:99px;padding:5px 11px;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.grp{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.grp>b{font-size:12px;color:var(--muted);font-weight:700;margin-right:2px}
+.note{margin:0;font-size:13px;color:var(--muted)}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+/* nets panel */
+.nets{background:var(--panel);border:1px solid var(--line);border-radius:18px;display:flex;flex-direction:column;min-height:0}
+.nets-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px 8px;border-bottom:1px solid var(--line)}
+.nets-head h2{margin:0;font-size:17px;font-weight:900}
+.nets-head small{color:var(--muted);font-weight:700;margin-left:6px}
+.close{display:inline-flex}
+.grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;padding:12px;overflow-y:auto}
+.cell{appearance:none;border:2px solid var(--line);background:var(--paper);border-radius:12px;padding:4px 4px 2px;cursor:pointer;display:flex;flex-direction:column;align-items:center}
+.cell svg{width:100%;height:64px}
+.cell span{font-size:12px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
+.cell[aria-current="true"]{border-color:var(--accent);background:var(--soft)}
+.cell[aria-current="true"] span{color:var(--accent)}
+@media (min-width:960px){.nets{position:sticky;top:14px;max-height:calc(100vh - 28px)} .close{display:none}}
+@media (max-width:959px){
+  .nets{position:fixed;left:0;right:0;bottom:0;z-index:30;border-radius:20px 20px 0 0;max-height:72vh;
+    padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);
+    transform:translateY(105%);transition:transform .25s ease;box-shadow:0 -8px 30px rgba(0,0,0,.25)}
+  .nets.open{transform:none}
+  .scrim{position:fixed;inset:0;background:rgba(10,15,25,.45);z-index:29}
+}
+@media (min-width:960px){.scrim{display:none!important}}
+@media (prefers-reduced-motion:reduce){.nets{transition:none}}
+</style>
+</head>
+<body>
+
+
+<div class="app">
+  <div class="main">
+    <header><h1>展開図ラボ</h1><p>立体をえらぶ → 展開図をえらぶ → 折ってみよう</p></header>
+    <nav class="shelf" id="shelf" aria-label="立体"></nav>
+    <div class="stage" id="stage">
+      <canvas id="cv" aria-label="展開図の3D表示"></canvas>
+      <div class="tag"><button class="icon-btn" id="prev" type="button" aria-label="前の展開図">‹</button><span class="t" id="netLabel">—</span><button class="icon-btn" id="next" type="button" aria-label="次の展開図">›</button></div>
+      <div class="facts" id="facts"></div>
+      <div class="hint">ドラッグで回転・ピンチで拡大</div>
+      <button class="open-nets" id="openNets" type="button">展開図をえらぶ</button>
+    </div>
+    <section class="bar" aria-label="操作">
+      <div class="row">
+        <button class="play" id="play" type="button">▶ 折る</button>
+        <div class="slider"><input type="range" id="t" min="0" max="1000" value="0" aria-label="折りぐあい"><span class="pct" id="pct">0%</span></div>
+        <div class="stops"><button class="chip" data-stop="0" type="button">0%</button><button class="chip" data-stop="0.5" type="button">50%</button><button class="chip" data-stop="1" type="button">100%</button></div>
+      </div>
+      <div class="row">
+        <div class="grp"><b>折りかた</b><button class="chip" id="mAll" type="button" aria-pressed="true">いっしょに</button><button class="chip" id="mSeq" type="button" aria-pressed="false">じゅんばんに</button></div>
+        <div class="grp"><b>速さ</b><button class="chip" data-speed="8" type="button" aria-pressed="false">ゆっくり</button><button class="chip" data-speed="4" type="button" aria-pressed="true">ふつう</button><button class="chip" data-speed="2" type="button" aria-pressed="false">はやい</button></div>
+      </div>
+      <div class="row">
+        <div class="grp" id="colorGrp"><b>色</b><button class="chip" id="cKind" type="button">面の形</button><button class="chip" id="cPair" type="button">向かい合う面</button></div>
+        <div class="grp" id="numGrp"><b>文字</b><button class="chip" id="numBtn" type="button" aria-pressed="false">番号</button></div>
+        <div class="grp"><b>視点</b><button class="chip" id="vTilt" type="button">ななめ</button><button class="chip" id="vTop" type="button">真上</button><button class="chip" id="vSide" type="button">横</button></div>
+      </div>
+      <p class="note" id="note"></p>
+    </section>
+  </div>
+  <div class="scrim" id="scrim" hidden></div>
+  <aside class="nets" id="nets" aria-label="展開図の一覧">
+    <div class="nets-head"><h2 id="netsTitle">展開図</h2><button class="icon-btn close" id="closeNets" type="button" aria-label="とじる">✕</button></div>
+    <div class="grid" id="grid"></div>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ===== Net engine: solids, spanning-tree enumeration, unfolding, dedupe =====
+const NetCore = (() => {
+  const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]], add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]],
+    mul=(a,s)=>[a[0]*s,a[1]*s,a[2]*s], dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],
+    cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],
+    len=a=>Math.sqrt(dot(a,a)), norm=a=>mul(a,1/len(a));
+
+  function makeSolid(V, F, opt={}) {
+    const c0 = mul(V.reduce(add,[0,0,0]), 1/V.length);
+    const faces = F.map(f=>{
+      let vs=f.slice();
+      let n=norm(cross(sub(V[vs[1]],V[vs[0]]),sub(V[vs[2]],V[vs[0]])));
+      const fc=mul(vs.map(i=>V[i]).reduce(add,[0,0,0]),1/vs.length);
+      if(dot(n,sub(fc,c0))<0){vs.reverse(); n=mul(n,-1);}
+      return {v:vs,n,c:fc};
+    });
+    // edges -> faces
+    const emap=new Map(), dual=[];
+    faces.forEach((f,fi)=>f.v.forEach((a,k)=>{
+      const b=f.v[(k+1)%f.v.length], key=a<b?a+','+b:b+','+a;
+      if(emap.has(key)){const o=emap.get(key); dual.push({f:[o.fi,fi],e:[o.a,o.b]});} else emap.set(key,{fi,a,b});
+    }));
+    // face kinds by shape signature
+    const sigs=[];
+    faces.forEach(f=>{
+      if(opt.kinds){f.kind=opt.kinds(f,faces.indexOf(f));return;}
+      const L=f.v.map((a,k)=>len(sub(V[f.v[(k+1)%f.v.length]],V[a])).toFixed(3)).sort().join('|');
+      let i=sigs.indexOf(L); if(i<0){sigs.push(L);i=sigs.length-1;} f.kind=i;
+    });
+    // opposite pairs
+    let pairs=null;
+    if(opt.pairs!==false){
+      pairs=faces.map(()=>-1); let ok=true;
+      faces.forEach((f,i)=>{const j=faces.findIndex(g=>dot(g.n,f.n)<-0.999); if(j<0) ok=false; else pairs[i]=j;});
+      if(ok){const pid=faces.map(()=>-1);let k=0;faces.forEach((f,i)=>{if(pid[i]<0){pid[i]=k;pid[pairs[i]]=k;k++;}});pairs=pid;}
+      else pairs=null;
+    }
+    return {V,faces,dual,pairs,group:opt.group||null};
+  }
+
+  // all spanning trees of the dual graph (as dual-edge index lists)
+  function spanningTrees(S){
+    const n=S.faces.length, E=S.dual, out=[];
+    const pick=[];
+    function find(p,x){while(p[x]!==x)x=p[x];return x;}
+    function rec(i,parent){
+      if(pick.length===n-1){out.push(pick.slice());return;}
+      if(E.length-i < n-1-pick.length) return;
+      const [a,b]=E[i].f, ra=find(parent,a), rb=find(parent,b);
+      if(ra!==rb){const p2=parent.slice(); p2[ra]=rb; pick.push(i); rec(i+1,p2); pick.pop();}
+      rec(i+1,parent);
+    }
+    rec(0,[...Array(n).keys()]);
+    return out;
+  }
+
+  // unfold a tree into a 2D net
+  function unfold(S, tree){
+    const n=S.faces.length, adj=[...Array(n)].map(()=>[]);
+    tree.forEach(ei=>{const d=S.dual[ei]; adj[d.f[0]].push({to:d.f[1],e:d.e}); adj[d.f[1]].push({to:d.f[0],e:d.e});});
+    // root = tree center
+    const ecc=f=>{const dist=Array(n).fill(-1);dist[f]=0;const q=[f];while(q.length){const x=q.shift();adj[x].forEach(y=>{if(dist[y.to]<0){dist[y.to]=dist[x]+1;q.push(y.to);}});}return Math.max(...dist);};
+    let root=0,best=1e9; for(let f=0;f<n;f++){const e=ecc(f); if(e<best){best=e;root=f;}}
+    const V=S.V, F=S.faces, pos=Array(n), parent=Array(n).fill(-1), hinge=Array(n), depth=Array(n).fill(0);
+    {const f=F[root], o=V[f.v[0]], u=norm(sub(V[f.v[1]],o)), v=cross(u,f.n);
+     pos[root]={}; f.v.forEach(i=>{const d=sub(V[i],o); pos[root][i]=[dot(d,u),dot(d,v)];});}
+    const q=[root], seen=Array(n).fill(false); seen[root]=true;
+    while(q.length){
+      const p=q.shift();
+      const pc=Object.values(pos[p]).reduce((a,b)=>[a[0]+b[0],a[1]+b[1]],[0,0]).map(x=>x/F[p].v.length);
+      for(const {to:c,e} of adj[p]){ if(seen[c]) continue; seen[c]=true;
+        const [i,j]=e, A=pos[p][i], B=pos[p][j];
+        let E2=[B[0]-A[0],B[1]-A[1]]; const l2=Math.hypot(...E2); E2=[E2[0]/l2,E2[1]/l2];
+        let P=[-E2[1],E2[0]]; if((pc[0]-A[0])*P[0]+(pc[1]-A[1])*P[1]>0) P=[-P[0],-P[1]];
+        const e3=norm(sub(V[j],V[i]));
+        pos[c]={};
+        F[c].v.forEach(k=>{
+          if(k===i){pos[c][k]=A;return;} if(k===j){pos[c][k]=B;return;}
+          const d=sub(V[k],V[i]), t=dot(d,e3), h=len(sub(d,mul(e3,t)));
+          pos[c][k]=[A[0]+t*E2[0]+h*P[0], A[1]+t*E2[1]+h*P[1]];
+        });
+        parent[c]=p; depth[c]=depth[p]+1;
+        hinge[c]={a:A,b:B,ang:Math.acos(Math.max(-1,Math.min(1,dot(F[p].n,F[c].n)))),key:[i,j]};
+        q.push(c);
+      }
+    }
+    const polys=F.map((f,fi)=>f.v.map(k=>pos[fi][k]));
+    return {root,parent,hinge,depth,polys,tree};
+  }
+
+  function overlaps(P,Q){
+    const eps=1e-6;
+    for(const poly of [P,Q]) for(let k=0;k<poly.length;k++){
+      const a=poly[k], b=poly[(k+1)%poly.length], ax=[-(b[1]-a[1]), b[0]-a[0]];
+      let p0=1e9,p1=-1e9,q0=1e9,q1=-1e9;
+      P.forEach(p=>{const s=p[0]*ax[0]+p[1]*ax[1]; p0=Math.min(p0,s); p1=Math.max(p1,s);});
+      Q.forEach(p=>{const s=p[0]*ax[0]+p[1]*ax[1]; q0=Math.min(q0,s); q1=Math.max(q1,s);});
+      if(p1<=q0+eps||q1<=p0+eps) return false;
+    }
+    return true;
+  }
+  function valid(net){
+    const P=net.polys;
+    // quick bbox
+    const bb=P.map(p=>{let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;p.forEach(q=>{x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1]);});return [x0,y0,x1,y1];});
+    for(let i=0;i<P.length;i++) for(let j=i+1;j<P.length;j++){
+      const a=bb[i],b=bb[j]; if(a[2]<=b[0]+1e-6||b[2]<=a[0]+1e-6||a[3]<=b[1]+1e-6||b[3]<=a[1]+1e-6) continue;
+      if(overlaps(P[i],P[j])) return false;
+    }
+    return true;
+  }
+  function signature(S, polys){
+    let best=null;
+    const cents=polys.map(p=>p.reduce((a,b)=>[a[0]+b[0],a[1]+b[1]],[0,0]).map(x=>x/p.length));
+    polys.forEach(p=>p.forEach((a0,k)=>{
+      const b0=p[(k+1)%p.length];
+      for(const [a,b] of [[a0,b0],[b0,a0]]){ let dx=b[0]-a[0],dy=b[1]-a[1]; const l=Math.hypot(dx,dy); dx/=l; dy/=l;
+      for(const r of [1,-1]){
+        const s=cents.map((c,i)=>{const x=c[0]-a[0],y=c[1]-a[1];
+          const X=Math.round((x*dx+y*dy)*100), Y=Math.round(r*(-x*dy+y*dx)*100);
+          return S.faces[i].kind+':'+(X||0)+':'+(Y||0);}).sort().join(';');
+        if(best===null||s<best) best=s;
+      }}
+    }));
+    return best;
+  }
+  // rotate net polys so bbox is minimal & landscape; returns new polys + hinge coords rotated
+  function orient(net){
+    const pts=net.polys.flat(); let bestA=1e9, bestT=0;
+    net.polys.forEach(p=>{if(p.length>6)return; p.forEach((a,k)=>{const b=p[(k+1)%p.length]; const t=-Math.atan2(b[1]-a[1],b[0]-a[0]);
+      for(const tt of [t,t+Math.PI/2]){const c=Math.cos(tt),s=Math.sin(tt); let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+        pts.forEach(q=>{const x=q[0]*c-q[1]*s,y=q[0]*s+q[1]*c;x0=Math.min(x0,x);x1=Math.max(x1,x);y0=Math.min(y0,y);y1=Math.max(y1,y);});
+        let A=(x1-x0)*(y1-y0); if(x1-x0<y1-y0-1e-6) A*=1.0001; if(A<bestA-1e-6){bestA=A;bestT=tt;}}});});
+    const c=Math.cos(bestT),s=Math.sin(bestT), R=q=>[q[0]*c-q[1]*s,q[0]*s+q[1]*c];
+    net.polys=net.polys.map(p=>p.map(R));
+    net.hinge=net.hinge.map(h=>h?{...h,a:R(h.a),b:R(h.b)}:h);
+    // bbox sanity: ensure landscape
+    let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; net.polys.flat().forEach(q=>{x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1]);});
+    if(y1-y0>x1-x0+1e-6){const RR=q=>[-q[1],q[0]]; net.polys=net.polys.map(p=>p.map(RR)); net.hinge=net.hinge.map(h=>h?{...h,a:RR(h.a),b:RR(h.b)}:h);}
+    return net;
+  }
+
+  function allNets(S){
+    const seen=new Set(), nets=[];
+    for(const t of spanningTrees(S)){
+      const net=unfold(S,t); if(!valid(net)) continue;
+      const sg=signature(S,net.polys); if(seen.has(sg)) continue;
+      seen.add(sg); nets.push(orient(net));
+    }
+    return nets;
+  }
+  function netFromTree(S, edgePairs){ // edgePairs: [[faceA,faceB],...]
+    const tree=edgePairs.map(([a,b])=>S.dual.findIndex(d=>(d.f[0]===a&&d.f[1]===b)||(d.f[0]===b&&d.f[1]===a)));
+    return orient(unfold(S,tree));
+  }
+
+  // ---- solids ----
+  function prism(base,h){ // base CCW 2D
+    const n=base.length, V=[...base.map(p=>[p[0],p[1],0]),...base.map(p=>[p[0],p[1],h])];
+    const F=[[...Array(n).keys()].reverse(), [...Array(n).keys()].map(i=>i+n)];
+    for(let i=0;i<n;i++){const j=(i+1)%n; F.push([i,j,j+n,i+n]);}
+    return {V,F};
+  }
+  function pyramid(base,h){
+    const n=base.length, V=[...base.map(p=>[p[0],p[1],0]),[0,0,h]];
+    const F=[[...Array(n).keys()].reverse()]; for(let i=0;i<n;i++) F.push([i,(i+1)%n,n]);
+    return {V,F};
+  }
+  const ngon=(n,side)=>{const R=side/(2*Math.sin(Math.PI/n)); return [...Array(n)].map((_,i)=>{const a=-Math.PI/2+Math.PI/n+2*Math.PI*i/n;return [R*Math.cos(a),R*Math.sin(a)];});};
+  const circle=(n,r)=>[...Array(n)].map((_,i)=>{const a=2*Math.PI*i/n;return [r*Math.cos(a),r*Math.sin(a)];});
+
+  return {makeSolid,allNets,netFromTree,prism,pyramid,ngon,circle,unfold,spanningTrees};
+})();
+
+
+</script>
+<script>
+const C=NetCore, SQ2=Math.SQRT2;
+const KIND_COL=['#6a9ae0','#f2b134','#5cbf8a','#ef7f6a'];
+const PAIR_COL=['#6a9ae0','#f2b134','#5cbf8a','#ef7f6a','#a98be0','#4fb7c4'];
+const EDGE='#1b2532';
+
+function cylinder(){const N=32,r=.55,h=1.7;const p=C.prism(C.circle(N,r),h);
+  const S=C.makeSolid(p.V,p.F,{pairs:false,kinds:(f,i)=>i<2?1:0});S.group=S.faces.map((f,i)=>i<2?null:'side');S.N=N;return S;}
+function cone(){const N=36,r=.8,l=2.4;const p=C.pyramid(C.circle(N,r),Math.sqrt(l*l-r*r));
+  const S=C.makeSolid(p.V,p.F,{pairs:false,kinds:(f,i)=>i===0?1:0});S.group=S.faces.map((f,i)=>i===0?null:'side');S.N=N;return S;}
+
+const SOLIDS=[
+  {id:'cube',name:'立方体',make:()=>{const p=C.prism([[0,0],[1,0],[1,1],[0,1]],1);return C.makeSolid(p.V,p.F);},color:'pair',
+   tip:'同じ色の面は、組み立てると向かい合います。「番号」でサイコロの目（向かい合う面の和が7）も確かめられます。'},
+  {id:'box',name:'直方体',make:()=>{const p=C.prism([[0,0],[2,0],[2,1.5],[0,1.5]],1);return C.makeSolid(p.V,p.F);},color:'pair',
+   tip:'たて・よこ・高さがちがう直方体（4:3:2）。同じ大きさの長方形が2枚ずつ、向かい合います。'},
+  {id:'tri',name:'三角柱',make:()=>{const p=C.prism(C.ngon(3,1),1);return C.makeSolid(p.V,p.F,{pairs:false});},color:'kind',
+   tip:'底面が正三角形、側面が正方形の三角柱。2つの三角形は、帯になった正方形の両はしにつきます。'},
+  {id:'tet',name:'正四面体',make:()=>{const k=1/(2*SQ2);const V=[[1,1,1],[1,-1,-1],[-1,1,-1],[-1,-1,1]].map(v=>v.map(x=>x*k));return C.makeSolid(V,[[0,1,2],[0,1,3],[0,2,3],[1,2,3]],{pairs:false});},color:'kind',
+   tip:'4枚の正三角形でできた三角すい。展開図は大きな正三角形型と、平行四辺形型の2種類だけです。'},
+  {id:'pyr',name:'四角すい',make:()=>{const p=C.pyramid(C.ngon(4,1),1/SQ2);return C.makeSolid(p.V,p.F,{pairs:false});},color:'kind',
+   tip:'底面が正方形、側面が正三角形の正四角すい。'},
+  {id:'oct',name:'正八面体',make:()=>{const k=1/SQ2;const V=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]].map(v=>v.map(x=>x*k));const F=[];for(const a of [0,1])for(const b of [2,3])for(const c of [4,5])F.push([a,b,c]);return C.makeSolid(V,F);},color:'pair',
+   tip:'8枚の正三角形。同じ色の面は向かい合い、平行になります。'},
+  {id:'cyl',name:'円柱',make:cylinder,curved:true,color:'kind',facts:'平面 2 ・ 曲面 1',
+   custom:S=>{const N=S.N,ch=[];for(let i=2;i<N+1;i++)ch.push([i,i+1]);const m=2+N/2;
+     return [C.netFromTree(S,[...ch,[0,m],[1,m]]),C.netFromTree(S,[...ch,[0,2+N/4],[1,2+3*N/4]]),C.netFromTree(S,[...ch,[0,m-4],[1,m+4]])];},
+   tip:'側面は長方形になります。長方形の横の長さ ＝ 円周（直径×3.14）。'},
+  {id:'cone',name:'円すい',make:cone,curved:true,color:'kind',facts:'平面 1 ・ 曲面 1',
+   custom:S=>{const N=S.N,ch=[];for(let i=1;i<N;i++)ch.push([i,i+1]);return [C.netFromTree(S,[...ch,[0,1+N/2]])];},
+   tip:'側面はおうぎ形。中心角 ＝ 360°×（底面の半径÷母線）。ここでは 半径0.8・母線2.4 なので 120°。'},
+];
+
+// ---------- data prep ----------
+function prepare(sd){
+  if(sd.S) return;
+  const S=sd.make(); sd.S=S;
+  let nets=sd.custom?sd.custom(S):C.allNets(S);
+  if(sd.id==='cyl') nets.forEach(n=>{const RR=q=>[-q[1],q[0]]; n.polys=n.polys.map(p=>p.map(RR)); n.hinge=n.hinge.map(h=>h?{...h,a:RR(h.a),b:RR(h.b)}:h);});
+  nets.forEach(n=>{
+    let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; n.polys.flat().forEach(q=>{x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1]);});
+    n.bb=[x0,y0,x1,y1];
+    n.hidden=new Set();
+    if(S.group) n.tree.forEach(ei=>{const d=S.dual[ei]; if(S.group[d.f[0]]&&S.group[d.f[0]]===S.group[d.f[1]]){const [a,b]=d.e;n.hidden.add(a<b?a+','+b:b+','+a);}});
+    n.maxDepth=Math.max(...n.depth);
+  });
+  if(!sd.custom) nets.sort((a,b)=>(b.bb[2]-b.bb[0])-(a.bb[2]-a.bb[0]) || (a.bb[3]-a.bb[1])-(b.bb[3]-b.bb[1]));
+  sd.nets=nets;
+  const E=S.faces.reduce((s,f)=>s+f.v.length,0)/2;
+  sd.factsText=sd.facts||`面 ${S.faces.length} ・ 辺 ${E} ・ 頂点 ${S.V.length}`;
+  // numbers: dice for cube
+  if(sd.id==='cube'){const dice=[[1,6],[2,5],[3,4]],used={};S.num=S.faces.map((f,i)=>{const p=S.pairs[i];used[p]=(used[p]||0)+1;return dice[p][used[p]-1];});}
+  else S.num=S.faces.map((f,i)=>i+1);
+}
+function faceColor(sd,fi,mode){const S=sd.S; mode=mode||state.color; return (mode==='pair'&&S.pairs)?PAIR_COL[S.pairs[fi]%PAIR_COL.length]:KIND_COL[S.faces[fi].kind%KIND_COL.length];}
+const edgeKey=(a,b)=>a<b?a+','+b:b+','+a;
+
+// ---------- SVG ----------
+function netSVG(sd,n){
+  const pad=.12,[x0,y0,x1,y1]=n.bb, S=sd.S;
+  let s=`<svg viewBox="${(x0-pad).toFixed(3)} ${(-y1-pad).toFixed(3)} ${(x1-x0+2*pad).toFixed(3)} ${(y1-y0+2*pad).toFixed(3)}" aria-hidden="true">`;
+  const sw=Math.max(x1-x0,y1-y0)*.012;
+  n.polys.forEach((p,fi)=>{const col=faceColor(sd,fi);
+    s+=`<polygon points="${p.map(q=>q[0].toFixed(3)+','+(-q[1]).toFixed(3)).join(' ')}" fill="${col}" stroke="${col}" stroke-width="${sw}"/>`;});
+  n.polys.forEach((p,fi)=>{const v=S.faces[fi].v;let d='';
+    p.forEach((q,k)=>{if(n.hidden.has(edgeKey(v[k],v[(k+1)%v.length])))return;const r=p[(k+1)%p.length];d+=`M${q[0].toFixed(3)} ${(-q[1]).toFixed(3)}L${r[0].toFixed(3)} ${(-r[1]).toFixed(3)}`;});
+    if(d) s+=`<path d="${d}" stroke="${EDGE}" stroke-width="${sw*1.3}" stroke-linecap="round" fill="none"/>`;});
+  return s+'</svg>';
+}
+function solidSVG(sd){
+  const S=sd.S, ya=.62, pa=.42, cy=Math.cos(ya),sy=Math.sin(ya),cp=Math.cos(pa),sp=Math.sin(pa);
+  const c=S.V.reduce((a,v)=>[a[0]+v[0],a[1]+v[1],a[2]+v[2]],[0,0,0]).map(x=>x/S.V.length);
+  const P=v=>{let x=v[0]-c[0],y=v[1]-c[1],z=v[2]-c[2]; // z up -> screen
+    let X=x*cy-y*sy, Y=x*sy+y*cy; return [X, -(z*cp - Y*sp), z*sp+Y*cp];};
+  const pts=S.V.map(P); let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; pts.forEach(q=>{x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1]);});
+  const sz=Math.max(x1-x0,y1-y0), pad=sz*.08;
+  let s=`<svg viewBox="${x0-pad} ${y0-pad} ${x1-x0+2*pad} ${y1-y0+2*pad}" aria-hidden="true">`;
+  const light=[.35,-.55,.75], L=Math.hypot(...light);
+  const fs=S.faces.map((f,i)=>{const n=f.n; const vx=n[0]*cy-n[1]*sy, vy=n[0]*sy+n[1]*cy; const depthDir=n[2]*sp+vy*cp; // toward viewer = negative "depth"
+    return {i,vis:depthDir, sh:Math.max(0,(n[0]*light[0]+n[1]*light[1]+n[2]*light[2])/L)};});
+  const sw=sz*.018;
+  fs.filter(f=>f.vis>1e-6).forEach(f=>{const col=faceColor(sd,f.i,sd.color);const p=S.faces[f.i].v.map(k=>pts[k]);
+    const smooth=S.group&&S.group[f.i];
+    s+=`<polygon points="${p.map(q=>q[0].toFixed(3)+','+q[1].toFixed(3)).join(' ')}" fill="${col}" stroke="${smooth?col:EDGE}" stroke-width="${smooth?sw*.4:sw}" stroke-linejoin="round"/>`;
+    s+=`<polygon points="${p.map(q=>q[0].toFixed(3)+','+q[1].toFixed(3)).join(' ')}" fill="#000" opacity="${((1-f.sh)*.28).toFixed(2)}"/>`;});
+  return s+'</svg>';
+}
+
+// ---------- three ----------
+const canvas=document.getElementById('cv'), stage=document.getElementById('stage');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1));
+const scene=new THREE.Scene(), camera=new THREE.PerspectiveCamera(32,1,.05,200);
+scene.add(new THREE.AmbientLight(0xffffff,.6));
+const sun=new THREE.DirectionalLight(0xffffff,.55); sun.position.set(3,6,5); scene.add(sun);
+const fillL=new THREE.DirectionalLight(0xffffff,.28); fillL.position.set(-5,-2,-3); scene.add(fillL);
+const spin=new THREE.Group(), base=new THREE.Group(), inner=new THREE.Group();
+base.rotation.x=-Math.PI/2; spin.add(base); base.add(inner); scene.add(spin);
+const VIEWS={tilt:[.62,-.55],top:[1.5,0],side:[.08,-.6]};
+let yaw=VIEWS.tilt[1], pitch=VIEWS.tilt[0], zoom=1, viewAnim=null;
+
+const state={solid:null,net:0,t:0,target:null,seq:false,speed:4,color:'pair',num:false};
+let faces=[], fitFlat=3, fitFold=2;
+
+function numTexture(n,flip){
+  const cv=document.createElement('canvas');cv.width=cv.height=128;const g=cv.getContext('2d');
+  g.fillStyle='#fff';g.fillRect(0,0,128,128);g.fillStyle='#1b2532';g.font='900 58px "Zen Maru Gothic",sans-serif';g.textAlign='center';g.textBaseline='middle';
+  if(flip){g.translate(128,0);g.scale(-1,1);} g.fillText(String(n),64,68);
+  const t=new THREE.CanvasTexture(cv); return t;
+}
+function buildScene(){
+  while(inner.children.length){const c=inner.children[0]; inner.remove(c); c.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material){if(o.material.map)o.material.map.dispose();o.material.dispose();}});}
+  faces=[];
+  const sd=state.solid, n=sd.nets[state.net], S=sd.S;
+  n.polys.forEach((p,fi)=>{
+    const g=new THREE.Group(); g.matrixAutoUpdate=false;
+    const cx=p.reduce((a,q)=>a+q[0],0)/p.length, cy=p.reduce((a,q)=>a+q[1],0)/p.length;
+    let w=0; p.forEach(q=>w=Math.max(w,Math.abs(q[0]-cx),Math.abs(q[1]-cy))); const s=w*2*1.15;
+    const pos=[],uv=[],uvb=[]; p.forEach(q=>{pos.push(q[0],q[1],0);const u=(q[0]-cx)/s+.5,v=(q[1]-cy)/s+.5;uv.push(u,v);uvb.push(1-u,v);});
+    let area=0; p.forEach((q,k)=>{const r=p[(k+1)%p.length];area+=q[0]*r[1]-r[0]*q[1];});
+    const idx=[]; for(let i=1;i<p.length-1;i++) area>0?idx.push(0,i,i+1):idx.push(0,i+1,i);
+    const mk=(uvs,side)=>{const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+      geo.setAttribute('uv',new THREE.Float32BufferAttribute(uvs,2));geo.setIndex(idx);geo.computeVertexNormals();
+      const mat=new THREE.MeshStandardMaterial({side,roughness:.75,metalness:0,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
+      const m=new THREE.Mesh(geo,mat); g.add(m); return m;};
+    const front=mk(uv,THREE.FrontSide), back=mk(uvb,THREE.BackSide);
+    const v=S.faces[fi].v, seg=[];
+    p.forEach((q,k)=>{if(n.hidden.has(edgeKey(v[k],v[(k+1)%v.length])))return;const r=p[(k+1)%p.length];seg.push(q[0],q[1],0,r[0],r[1],0);});
+    if(seg.length){const lg=new THREE.BufferGeometry();lg.setAttribute('position',new THREE.Float32BufferAttribute(seg,3));
+      g.add(new THREE.LineSegments(lg,new THREE.LineBasicMaterial({color:EDGE})));}
+    inner.add(g);
+    const h=n.hinge[fi];
+    let sign=1,axis=null;
+    if(h){const dx=h.b[0]-h.a[0],dy=h.b[1]-h.a[1];sign=(dx*(cy-h.a[1])-dy*(cx-h.a[0]))>0?1:-1;axis=new THREE.Vector3(dx,dy,0).normalize();}
+    faces.push({g,front,back,fi,h,sign,axis,depth:n.depth[fi],parent:n.parent[fi],cx,cy});
+  });
+  // order parents first
+  faces.sort((a,b)=>a.depth-b.depth);
+  applyLook();
+  // camera fit
+  const R=(t)=>{pose(t,true);let c=new THREE.Vector3(),m=0,v=new THREE.Vector3(),pts=[];
+    faces.forEach(f=>{n.polys[f.fi].forEach(q=>{v.set(q[0],q[1],0).applyMatrix4(f.M);pts.push(v.clone());c.add(v);m++;});});
+    c.divideScalar(m);return Math.max(...pts.map(p=>p.distanceTo(c)));};
+  fitFlat=R(0); fitFold=R(1);
+}
+function applyLook(){
+  const sd=state.solid;
+  faces.forEach(f=>{const col=new THREE.Color(faceColor(sd,f.fi));
+    [f.front,f.back].forEach((m,j)=>{m.material.color.copy(col);
+      if(m.material.map){m.material.map.dispose();m.material.map=null;}
+      if(state.num&&!sd.curved){m.material.map=numTexture(sd.S.num[f.fi],j===1);}
+      m.material.needsUpdate=true;});});
+}
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const ease=x=>x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;
+const tmpA=new THREE.Matrix4(),tmpB=new THREE.Matrix4(),tmpC=new THREE.Matrix4();
+function pose(t,noCenter){
+  const n=state.solid.nets[state.net], D=n.maxDepth||1, byFi={};
+  for(const f of faces){
+    if(!f.h){f.M=new THREE.Matrix4();byFi[f.fi]=f;continue;}
+    const local=state.seq?ease(clamp(t*D-(f.depth-1),0,1)):ease(t);
+    tmpA.makeTranslation(f.h.a[0],f.h.a[1],0); tmpB.makeRotationAxis(f.axis,f.sign*f.h.ang*local); tmpC.makeTranslation(-f.h.a[0],-f.h.a[1],0);
+    f.M=byFi[f.parent].M.clone().multiply(tmpA).multiply(tmpB).multiply(tmpC); byFi[f.fi]=f;
+  }
+  if(noCenter) return;
+  const c=new THREE.Vector3(),v=new THREE.Vector3(); let m=0;
+  for(const f of faces){f.g.matrix.copy(f.M);f.g.matrixWorldNeedsUpdate=true;
+    n.polys[f.fi].forEach(q=>{v.set(q[0],q[1],0).applyMatrix4(f.M);c.add(v);m++;});}
+  c.divideScalar(m); inner.position.set(-c.x,-c.y,-c.z);
+}
+function resize(){const w=stage.clientWidth,h=stage.clientHeight;if(!w||!h)return;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
+new ResizeObserver(resize).observe(stage);
+
+// ---------- UI ----------
+const $=id=>document.getElementById(id);
+const slider=$('t'),pct=$('pct'),playBtn=$('play'),grid=$('grid'),netsEl=$('nets'),scrim=$('scrim');
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function setT(v){state.t=clamp(v,0,1);slider.value=Math.round(state.t*1000);pct.textContent=Math.round(state.t*100)+'%';
+  playBtn.textContent=state.target!==null?'❚❚ 止める':(state.t>=.999?'↺ ひらく':'▶ 折る');}
+function press(el,on){el.setAttribute('aria-pressed',on?'true':'false');}
+
+function renderShelf(){
+  const shelf=$('shelf'); shelf.innerHTML='';
+  SOLIDS.forEach(sd=>{prepare(sd);const b=document.createElement('button');b.type='button';b.className='solid';
+    b.innerHTML=solidSVG(sd)+`<span>${sd.name}</span>`;press(b,sd===state.solid);
+    b.onclick=()=>{if(sd!==state.solid) selectSolid(sd); openNets();};
+    shelf.appendChild(b);});
+}
+function renderGrid(){
+  const sd=state.solid;
+  $('netsTitle').innerHTML=`${sd.name}の展開図<small>${sd.nets.length}種類</small>`;
+  grid.innerHTML='';
+  sd.nets.forEach((n,i)=>{const b=document.createElement('button');b.type='button';b.className='cell';
+    b.innerHTML=netSVG(sd,n)+`<span>No.${i+1}</span>`; if(i===state.net) b.setAttribute('aria-current','true');
+    b.onclick=()=>{selectNet(i);closeNets();}; grid.appendChild(b);});
+}
+function selectSolid(sd){
+  prepare(sd); state.solid=sd; state.net=0; state.color=sd.S.pairs?sd.color:'kind';
+  $('facts').textContent=sd.factsText;
+  $('colorGrp').hidden=!sd.S.pairs; $('numGrp').hidden=!!sd.curved;
+  $('numBtn').textContent=sd.id==='cube'?'サイコロの目':'番号';
+  syncChips(); renderShelf(); selectNet(0);
+}
+function selectNet(i){
+  const sd=state.solid; state.net=(i+sd.nets.length)%sd.nets.length; state.target=null;
+  buildScene(); setT(0);
+  $('netLabel').textContent=`No.${state.net+1} / ${sd.nets.length}`;
+  $('note').textContent=sd.tip;
+  renderGrid();
+  const cur=grid.querySelector('[aria-current="true"]'); if(cur&&matchMedia('(min-width:960px)').matches) cur.scrollIntoView({block:'nearest'});
+}
+function syncChips(){press($('cKind'),state.color==='kind');press($('cPair'),state.color==='pair');press($('numBtn'),state.num);
+  press($('mAll'),!state.seq);press($('mSeq'),state.seq);
+  document.querySelectorAll('[data-speed]').forEach(b=>press(b,+b.dataset.speed===state.speed));}
+function openNets(){if(matchMedia('(min-width:960px)').matches)return;netsEl.classList.add('open');scrim.hidden=false;}
+function closeNets(){netsEl.classList.remove('open');scrim.hidden=true;}
+
+$('openNets').onclick=openNets; $('closeNets').onclick=closeNets; scrim.onclick=closeNets;
+$('prev').onclick=()=>selectNet(state.net-1); $('next').onclick=()=>selectNet(state.net+1);
+slider.addEventListener('input',()=>{state.target=null;setT(slider.value/1000);});
+playBtn.onclick=()=>{
+  if(state.target!==null){state.target=null;setT(state.t);return;}
+  state.target=state.t>=.999?0:1; if(reduce){setT(state.target);state.target=null;} setT(state.t);};
+document.querySelectorAll('[data-stop]').forEach(b=>b.onclick=()=>{state.target=+b.dataset.stop; if(reduce||Math.abs(state.target-state.t)<1e-3){setT(state.target);state.target=null;} setT(state.t);});
+$('mAll').onclick=()=>{state.seq=false;syncChips();};
+$('mSeq').onclick=()=>{state.seq=true;syncChips();};
+document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{state.speed=+b.dataset.speed;syncChips();});
+$('cKind').onclick=()=>{state.color='kind';syncChips();applyLook();renderGrid();renderShelf();};
+$('cPair').onclick=()=>{state.color='pair';syncChips();applyLook();renderGrid();renderShelf();};
+$('numBtn').onclick=()=>{state.num=!state.num;syncChips();applyLook();};
+const setView=v=>{viewAnim={from:[pitch,yaw],to:VIEWS[v],k:0};zoom=1;};
+$('vTilt').onclick=()=>setView('tilt'); $('vTop').onclick=()=>setView('top'); $('vSide').onclick=()=>setView('side');
+document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;
+  if(e.key==='ArrowRight')selectNet(state.net+1); if(e.key==='ArrowLeft')selectNet(state.net-1); if(e.key==='Escape')closeNets();});
+
+// pointer: rotate / pinch zoom
+const ptrs=new Map(); let drag=null,pinch=null;
+canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,[e.clientX,e.clientY]);viewAnim=null;
+  if(ptrs.size===1) drag={x:e.clientX,y:e.clientY,yaw,pitch};
+  if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinch={d:Math.hypot(a[0]-b[0],a[1]-b[1]),z:zoom};drag=null;}});
+canvas.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,[e.clientX,e.clientY]);
+  if(pinch&&ptrs.size===2){const [a,b]=[...ptrs.values()];zoom=clamp(pinch.z*Math.hypot(a[0]-b[0],a[1]-b[1])/pinch.d,.5,3);}
+  else if(drag){yaw=drag.yaw+(e.clientX-drag.x)*.01;pitch=clamp(drag.pitch+(e.clientY-drag.y)*.01,-1.55,1.55);}});
+const up=e=>{ptrs.delete(e.pointerId);if(ptrs.size<2)pinch=null;if(ptrs.size===0)drag=null;
+  else if(ptrs.size===1){const [p]=[...ptrs.values()];drag={x:p[0],y:p[1],yaw,pitch};}};
+canvas.addEventListener('pointerup',up);canvas.addEventListener('pointercancel',up);
+canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=clamp(zoom*Math.exp(-e.deltaY*.0015),.5,3);},{passive:false});
+
+let last=performance.now();
+function loop(now){
+  const dt=Math.min(.05,(now-last)/1000); last=now;
+  if(state.target!==null){const dir=Math.sign(state.target-state.t),nt=state.t+dir*dt/state.speed;
+    if((dir>0&&nt>=state.target)||(dir<=0&&nt<=state.target)){const tg=state.target;state.target=null;setT(tg);} else setT(nt);}
+  if(viewAnim){viewAnim.k=Math.min(1,viewAnim.k+dt*2.5);const e=ease(viewAnim.k);
+    pitch=viewAnim.from[0]+(viewAnim.to[0]-viewAnim.from[0])*e; yaw=viewAnim.from[1]+(viewAnim.to[1]-viewAnim.from[1])*e; if(viewAnim.k>=1)viewAnim=null;}
+  spin.rotation.set(pitch,yaw,0);
+  pose(state.t);
+  const R=fitFlat+(fitFold-fitFlat)*ease(state.t);
+  const half=THREE.MathUtils.degToRad(camera.fov/2), aspectFix=Math.min(1,camera.aspect);
+  camera.position.set(0,0,(R*1.12)/Math.sin(half)/aspectFix/zoom); camera.lookAt(0,0,0);
+  renderer.render(scene,camera);
+  requestAnimationFrame(loop);
+}
+selectSolid(SOLIDS[0]); resize(); requestAnimationFrame(loop);
+</script>
+
+</body>
+</html>
