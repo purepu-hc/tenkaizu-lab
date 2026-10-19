@@ -7,7 +7,12 @@
 <title>展開図ラボ</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
-<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}/* おうちラボへ戻るボタン */
+.ouchi-home{display:inline-flex;align-items:center;gap:4px;flex:none;align-self:center;padding:3px 10px 3px 8px;border:2px solid currentColor;border-radius:999px;font:700 12px/1.4 "Zen Maru Gothic",sans-serif;letter-spacing:.04em;color:var(--muted,var(--ink-2,#5a687c));text-decoration:none;white-space:nowrap}
+.ouchi-home:hover{color:var(--ink,#1c2736)}
+.ouchi-home:focus-visible{outline:3px solid var(--accent,#2f6bd8);outline-offset:2px}
+.ouchi-home svg{width:15px;height:15px}
+</style>
 <style>
 /* Layout: workbench — solid shelf on top, 3D stage on graph paper, control bar below; nets panel = side column (wide) / bottom sheet (phone) */
 :root{
@@ -100,7 +105,7 @@ input[type=range]{flex:1;min-width:0;accent-color:var(--accent);height:28px}
 
 <div class="app">
   <div class="main">
-    <header><h1>展開図ラボ</h1><p>立体をえらぶ → 展開図をえらぶ → 折ってみよう</p></header>
+    <header><a class="ouchi-home" href="https://ouchi-lab.vercel.app/" aria-label="おうちラボへもどる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5h4v5"/></svg>おうちラボ</a><h1>展開図ラボ</h1><p>立体をえらぶ → 展開図をえらぶ → 折ってみよう</p></header>
     <nav class="shelf" id="shelf" aria-label="立体"></nav>
     <div class="stage" id="stage">
       <canvas id="cv" aria-label="展開図の3D表示"></canvas>
